@@ -1,38 +1,50 @@
-use sha3::{Digest, Sha3_256};
+use rand::{self, Rng};
+use sha2::{Digest, Sha256};
 
+#[derive(Debug)]
 pub struct ProofOfWork {
     difficulty: u64,
 }
 
 impl ProofOfWork {
-    pub fn new(difficulty: u64) -> ProofOfWork {
-        ProofOfWork { difficulty }
+    pub fn new(difficulty: u64) -> Self {
+        Self { difficulty }
     }
 
-    pub fn run(&self, data: &[u8]) -> u64 {
-        let mut nonce: u64 = 0;
-        let mut hash_output = [0; 32];
+    pub fn run(&self, data: &[u8]) -> (u64, Vec<u8>) {
+        let mut nonce = 0;
+        let mut hash = Vec::new();
+        let mut rng = rand::thread_rng();
 
         loop {
-            let input = [data, &nonce.to_le_bytes()].concat();
-            let hash = Sha3_256::digest(&input);
+            let mut hasher = Sha256::new();
+            hasher.update(data);
+            hasher.update(&nonce.to_le_bytes());
 
-            if hash[..8].eq(&[0u8; 8]) {
-                hash_output.copy_from_slice(&hash[..]);
+            let result = hasher.finalize();
+
+            if check_difficulty(&result, self.difficulty) {
+                hash = result.to_vec();
                 break;
-            } else {
-                nonce += 1;
             }
+
+            nonce = rng.gen();
         }
 
-        nonce
-    }
-
-    pub fn validate(&self, data: &[u8], nonce: u64) -> bool {
-        let input = [data, &nonce.to_le_bytes()].concat();
-        let hash = Sha3_256::digest(&input);
-
-        hash[..8].eq(&[0u8; 8])
+        (nonce, hash)
     }
 }
 
+fn check_difficulty(hash: &[u8], difficulty: u64) -> bool {
+    let mut leading_zeros = 0;
+
+    for byte in hash.iter() {
+        if *byte != 0 {
+            break;
+        }
+
+        leading_zeros += 1;
+    }
+
+    leading_zeros >= difficulty as usize
+}
